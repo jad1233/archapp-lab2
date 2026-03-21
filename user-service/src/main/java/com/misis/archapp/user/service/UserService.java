@@ -8,19 +8,15 @@ import com.misis.archapp.user.dto.UserUpdateDTO;
 import com.misis.archapp.user.dto.mapper.UserMapper;
 import java.util.List;
 import java.util.UUID;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cache.annotation.Cacheable; // ✅ مهم
-import org.springframework.stereotype.Service;
 import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class UserService {
-
     private static final Logger LOGGER = LoggerFactory.getLogger(UserService.class);
 
     private final UserRepository userRepository;
@@ -28,8 +24,8 @@ public class UserService {
 
     @Autowired
     public UserService(
-            UserRepository userRepository,
-            UserMapper userMapper
+        UserRepository userRepository,
+        UserMapper userMapper
     ) {
         this.userRepository = userRepository;
         this.userMapper = userMapper;
@@ -39,8 +35,11 @@ public class UserService {
         return userMapper.toDTOList(userRepository.findAll());
     }
 
-    @Cacheable(value = "users", key = "#id")
     public UserDTO getUserById(UUID id) {
+        return getUserFromDB(id);
+    }
+
+    public UserDTO getUserFromDB(UUID id) {
         LOGGER.info("User cache miss");
 
         return userRepository.findById(id)
@@ -56,7 +55,7 @@ public class UserService {
 
     public UserDTO updateUser(UUID id, UserUpdateDTO userUpdateDTO) {
         User user = userRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
 
         if (userUpdateDTO.name().isPresent()) {
             user.setName(userUpdateDTO.name().get());
