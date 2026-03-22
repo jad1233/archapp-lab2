@@ -6,8 +6,12 @@ import com.misis.archapp.user.dto.UserCreateDTO;
 import com.misis.archapp.user.dto.UserDTO;
 import com.misis.archapp.user.dto.UserUpdateDTO;
 import com.misis.archapp.user.dto.mapper.UserMapper;
+import com.misis.archapp.user.service.cache.UserCacheService;
+
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,18 +21,22 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class UserService {
+
     private static final Logger LOGGER = LoggerFactory.getLogger(UserService.class);
 
     private final UserRepository userRepository;
     private final UserMapper userMapper;
+    private final UserCacheService userCacheService;
 
     @Autowired
     public UserService(
-        UserRepository userRepository,
-        UserMapper userMapper
+            UserRepository userRepository,
+            UserMapper userMapper,
+            UserCacheService userCacheService
     ) {
         this.userRepository = userRepository;
         this.userMapper = userMapper;
+        this.userCacheService = userCacheService;
     }
 
     public List<UserDTO> getAllUsers() {
@@ -36,15 +44,23 @@ public class UserService {
     }
 
     public UserDTO getUserById(UUID id) {
-        return getUserFromDB(id);
-    }
 
-    public UserDTO getUserFromDB(UUID id) {
+        Optional<UserDTO> cached = userCacheService.getFromCache(id);
+
+        if (cached.isPresent()) {
+            LOGGER.info("User cache hit");
+            return cached.get();
+        }
+
         LOGGER.info("User cache miss");
 
-        return userRepository.findById(id)
+        UserDTO user = userRepository.findById(id)
                 .map(userMapper::toDTO)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+
+        userCacheService.saveToCache(user);
+
+        return user;
     }
 
     public UserDTO createUser(UserCreateDTO userCreateDTO) {
@@ -55,7 +71,7 @@ public class UserService {
 
     public UserDTO updateUser(UUID id, UserUpdateDTO userUpdateDTO) {
         User user = userRepository.findById(id)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
 
         if (userUpdateDTO.name().isPresent()) {
             user.setName(userUpdateDTO.name().get());
@@ -67,10 +83,16 @@ public class UserService {
 
         User savedUser = userRepository.save(user);
 
+        LOGGER.info("User cache evict on update");
+        userCacheService.deleteFromCache(id);
+
         return userMapper.toDTO(savedUser);
     }
 
     public void deleteUser(UUID id) {
         userRepository.deleteById(id);
+
+        LOGGER.info("User cache evict on delete");
+        userCacheService.deleteFromCache(id);
     }
 }
